@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
-
 from flask import Flask, jsonify, request, make_response
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
 
 from models import db, Plant
 
@@ -24,6 +24,8 @@ class Plants(Resource):
 
     def post(self):
         data = request.get_json()
+        if not data or 'name' not in data or 'image' not in data or 'price' not in data:
+            return make_response(jsonify({"error": "Missing required data"}), 400)
 
         new_plant = Plant(
             name=data['name'],
@@ -34,7 +36,7 @@ class Plants(Resource):
         db.session.add(new_plant)
         db.session.commit()
 
-        return make_response(new_plant.to_dict(), 201)
+        return make_response(jsonify(new_plant.to_dict()), 201)
 
 
 api.add_resource(Plants, '/plants')
@@ -42,20 +44,29 @@ api.add_resource(Plants, '/plants')
 
 class PlantByID(Resource):
     def get(self, id):
-        plant = Plant.query.get_or_404(id)  # This is already using get_or_404()
+        plant = db.session.get(Plant, id)
+        if plant is None:
+            return make_response(jsonify({"error": "Plant not found"}), 404)
         return make_response(jsonify(plant.to_dict()), 200)
 
     def patch(self, id):
-        plant = Plant.query.get_or_404(id)  # Using get_or_404() instead of get()
         data = request.get_json()
-        if 'is_in_stock' in data:
-            plant.is_in_stock = data['is_in_stock']
-        
+        if not data or 'is_in_stock' not in data:
+            return make_response(jsonify({"error": "Missing required data"}), 400)
+
+        plant = db.session.get(Plant, id)
+        if plant is None:
+            return make_response(jsonify({"error": "Plant not found"}), 404)
+
+        plant.is_in_stock = data['is_in_stock']
         db.session.commit()
         return make_response(jsonify(plant.to_dict()), 200)
 
     def delete(self, id):
-        plant = Plant.query.get_or_404(id)  # Using get_or_404() instead of get()
+        plant = db.session.get(Plant, id)
+        if plant is None:
+            return make_response(jsonify({"error": "Plant not found"}), 404)
+
         db.session.delete(plant)
         db.session.commit()
         return make_response('', 204)
